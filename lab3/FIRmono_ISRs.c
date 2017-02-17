@@ -2,7 +2,7 @@
 // Real-time Digital Signal Processing, 2011
 
 ///////////////////////////////////////////////////////////////////////
-// Filename: ISRs.c
+// Filename: FIRmono_ISRs.c
 //
 // Synopsis: Interrupt service routine for codec data transmit/receive
 //
@@ -26,7 +26,8 @@ volatile union {
 
 
 /* add any global variables here */
-float xLeft[N+1], *pLeft = xLeft;
+float xLeft[N+1];
+float yLeft;
 Int32 i;
 
 
@@ -44,29 +45,28 @@ interrupt void Codec_ISR()
 ///////////////////////////////////////////////////////////////////////
 {                    
 	/* add any local variables here */
-	float output, *p;  
+
 
  	if(CheckForOverrun())					// overrun error occurred (i.e. halted DSP)
 		return;								// so serial port is reset to recover
 
   	CodecDataIn.UINT = ReadCodecData();		// get input data samples
 	
-	/* I added my mono FIR filter routine here */
-	*pLeft  = CodecDataIn.Channel[LEFT];	// store LEFT input value
+	/* I added my FIR filter routine here */
+	xLeft[0]  = CodecDataIn.Channel[LEFT];	// current LEFT input value
+	yLeft = 0;				// initialize the output value
 
-	output = 0;								// set up for LEFT channel
-	p = pLeft;								// save current sample pointer
-	if(++pLeft > &xLeft[N])					// update pointer, wrap if necessary
-		pLeft = xLeft;						// and store
-	for (i = 0; i <= N; i++) {				// do LEFT channel FIR
-	        output += *p-- * B[i];  		// multiply and accumulate
-	        if(p < &xLeft[0])       		// check for pointer wrap around
-        	    p = &xLeft[N];
+	for (i = 0; i <= N; i++) {
+		yLeft += xLeft[i]*B[i];		// perform the dot-product
 	}
+	
+	for (i = N; i > 0; i--) {
+		xLeft[i] = xLeft[i-1];		// shift for the next input
+	}
+	
+	CodecDataOut.Channel[LEFT]  = yLeft;	// output the value	
+	/* end of my routine */
 
-	CodecDataOut.Channel[LEFT]  = output; // store filtered value		
-	CodecDataOut.Channel[RIGHT] = output; // store filtered value	
-	/* end of my mono FIR filter routine */	
 
 	WriteCodecData(CodecDataOut.UINT);		// send output data to  port
 }
