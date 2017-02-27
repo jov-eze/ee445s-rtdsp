@@ -4,25 +4,30 @@
 ///////////////////////////////////////////////////////////////////////
 // Filename: main.c
 //
-// Synopsis: Main program file for demonstration code
+// Synopsis: Main program file for frame-based processing using EDMA
 //
 ///////////////////////////////////////////////////////////////////////
 
-#include "DSP_Config.h"   
+#include "DSP_Config.h" 
+#include "frames.h" 
 
 int main()
 {    
+	// initialize all buffers to 0
+	ZeroBuffers();
 	
-	// initialize DSP board
-  	DSP_Init();
+	// initialize EDMA controller 
+	EDMA_Init();
+	
+	// initialize DSP and codec to use EDMA
+  	DSP_Init_EDMA();
 
-	// call StartUp for application specific code
-	// defined in each application directory
-	StartUp();
-	
-	// main stalls here, interrupts drive operation 
+             // call to StartUp not needed here
+
+	// main loop here, process buffer when ready 
   	while(1) { 
-		;
+        if(IsBufferReady()) // process buffers in background
+            ProcessBuffer();
   	}   
 }
 

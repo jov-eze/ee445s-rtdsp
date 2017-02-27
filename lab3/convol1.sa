@@ -1,0 +1,115 @@
+;******************************************************
+;  File: convol1.sa
+;   By: S.A. Tretter
+;   Date: 03/06/02
+;
+;   Compile using
+;
+;    cl6x -mv6701 -o3 convol1.sa
+;
+;   or by using Code Composer Studio with these options.
+;  
+;   This is a C callable assembly function for computing
+;   one convolution iteration. The circular buffering
+;   hardware of the C6000 is used. The function
+;   prototype is:
+;
+;   extern float convolve( float *, float *, int,
+;                    int, int);
+;
+;   The function can be called from C as
+;
+;       convolve(x, h, Nh, Nblock, newest)
+;
+;       x[]     circular input sample buffer
+;       h[]     FIR filter coefficients
+;       Nh      number of filter taps
+;       Nblock  circular buffer size in bytes is
+;               2^{Nblock+1} and in words is 2^{Nblock-1}
+;       newest  index pointing to newest sample in buffer
+;
+;    According to the TI C Compiler conventions, the 
+;    arguments on entry are found in the following
+;    registers:
+;
+;       &x[0]   A4
+;       &h[0]   B4
+;       Nh      A6
+;       Nblock  B6
+;       newest  A8
+;
+;    WARNING:  The C calling function must align the
+;     circular buffer, x[], on a boundary that is a
+;     multiple of the buffer size in bytes, that is, a
+;     multiple of BUF_LEN = 2^{Nblock+1} bytes.  This can 
+;     be done by a statement in the C program of the form
+;
+;      #pragma DATA_ALIGN(x, BUF_LEN)
+;
+;     The array x[] must be a global array according to 
+;     the TI C Compiler manual.
+;********************************************************
+
+          .global _convolve
+_convolve .cproc  x_addr, h_addr, Nh, Nblock, newest
+          .reg  sum, prod, x_value, h_value
+          .circ x_addr/b4  ; Added by Alex Olson (former TA) [This line is NOT in the textbook]
+
+;  Compute addressof x[newest] and put in x_addr
+;  Note: The instruction ADDAW shifts the second argument,
+;        newest, left 2 bits, i.e., multiplies it by 4,
+;        before adding it to the first argument to get the
+;        byte address of x[newest].
+
+     ADDAW   x_addr, newest, x_addr ; &x[newest]
+
+;-------------------------------------------------------
+;  Set up circular addressing
+;   Load Nblock into the BK0 field of the Address Mode
+;     Register (AMR)
+
+     SHL Nblock, 16, Nblock ; Shift Nblock to BK0 field
+
+;   Note: The assembly optimizer will assign x_addr to
+;         some register it likes.  You will have to
+;         manually look at the assembled and optimized
+;         code to see which register it picked and then
+;         set up the circular mode using BK0 by writing
+;         01 to the field for that register in AMR.
+;         The assembler will give you a warning that
+;         changing the AMR can give unpredicatable
+;         results but you can ignore this.
+;
+;         Suppose B4 was chosen by the optimizer.
+;
+     set Nblock, 8,8, Nblock; Set mode circular, BK0, B4
+;    set Nblock, 10,10, Nblock; Use this for B5.    
+     MVC Nblock, AMR        ; load mode into AMR
+;-------------------------------------------------------
+
+;  Clear convolution sum registers
+
+     ZERO  sum
+
+;  Now compute the convolution sum.
+
+loop:   .trip 8, 500  ; assume between 8 and 500 taps
+     LDW *x_addr--, x_value ; x[newest-k] -> x_value
+     LDW *h_addr++, h_value ; h[k] -> h_value
+     MPYSP  x_value, h_value, prod ; h[k]*x[n-k]
+     ADDSP prod, sum, sum ; sum of products
+
+ [Nh] SUB Nh, 1, Nh  ; Decrement count by 1 tap
+ [Nh] B  loop   ; Continue until all taps computed
+
+      .return sum  ; By C convention, put sum in A4
+      .endproc
+
+
+
+
+
+
+
+
+

@@ -2,14 +2,14 @@
 * Real-time Digital Signal Processing, 2011
 
 *//////////////////////////////////////////////////////////////////////
-*/ Filename: vectors.asm
+*/ Filename: vectors_EDMA.asm
 */
-*/ Synopsis: Interrupt vector table for OMAP-L138 DSP
+*/ Synopsis: Interrupt vector table for OMAP-L138 DSP using EDMA
 */
 *//////////////////////////////////////////////////////////////////////
 
     .ref    _c_int00
-    .ref    _Codec_ISR        
+    .ref	_EDMA_ISR       
   
     .sect   "vectors"
 	.nocmp	; do not allow 16 bit instructions to be used in the vector table
@@ -79,7 +79,7 @@ INT7:   b INT7	; stall here if interrupt occurs
 	NOP
 	NOP
 	NOP
-INT8:   b INT8	; stall here if interrupt occurs
+INT8:   b _EDMA_ISR
 	NOP
 	NOP
 	NOP
@@ -111,7 +111,7 @@ INT11:  b INT11	; stall here if interrupt occurs
 	NOP
 	NOP
 	NOP
-INT12:  b _Codec_ISR
+INT12:  b INT12	; stall here if interrupt occurs
 	NOP
 	NOP
 	NOP
