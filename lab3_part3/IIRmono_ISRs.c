@@ -31,21 +31,35 @@ float B[N+1] = { 0.108499, 0, -0.325498, 0, 0.325498, 0, -0.108499};  // numerat
 float A[N+1] = {1, -1.13553, 0.944316, -0.637821, 0.544417, -0.173657, 0.0459008}; // denom coefficients
 float x[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // input value (buffered)
 float y[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // output values (buffered)
+float *currentInput = &x[0];
 
 void iir_df_one(){
-	// compute the output value y[0]
-	CodecDataIn.UINT = ReadCodecData();
-	*currentInput = CodecDataIn.Channel[Left];
+//	CodecDataIn.UINT = ReadCodecData();
+//	*currentInput = CodecDataIn.Channel[0];
+	//y[n] = sum(bk*x) - sum(ak*y)
 
-	float Output = 0; sumX = 0; sumY=0;
-	for(int k = 0; k < 7; k++){
-		sumX += B[k];
-		sumY += A[k];
+	float sumB = 0;
+	float sumA = 0;
+	int k;
+	for (k = 0; k<=N; k++){
+	    sumB += B[k]*x[k];
+	}
+	for(k=1; k<=N; k++){
+	    sumA += A[k]*y[k];
 	}
 
-	Output
+	float currentY = sumB-sumA;
+	float currentX = currentInput[0];
 
-	// update state variables for previous x an dy
+	y[0] = currentY;
+	x[0] = currentX;
+
+	for(k=N; k>0; k--){
+	    y[k] = y[k-1];
+	    x[k] = x[k-1];
+	}
+
+
 
 }
 
@@ -71,11 +85,14 @@ interrupt void Codec_ISR()
   	CodecDataIn.UINT = ReadCodecData();		// get input data samples
 	
 	/* I added my IIR filter routine here */
-	x[0] = CodecDataIn.Channel[LEFT];		// current input value
+//	x[0] = CodecDataIn.Channel[LEFT];		// current input value
+	x[0] = CodecDataIn.Channel[RIGHT];		// current input value
+
 
 	iir_df_one();
 	
 	CodecDataOut.Channel[LEFT]  = y[0];		// setup the LEFT value	
+	CodecDataOut.Channel[RIGHT]=x[0];
 	/* end of my IIR filter routine	*/
 
 	WriteCodecData(CodecDataOut.UINT);		// send output data to  port
