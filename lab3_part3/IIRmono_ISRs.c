@@ -1,6 +1,5 @@
 // Welch, Wright, & Morrow, 
 // Real-time Digital Signal Processing, 2011
-
 ///////////////////////////////////////////////////////////////////////
 // Filename: ISRs.c
 //
@@ -25,8 +24,21 @@ volatile union {
 
 
 /* add any global variables here */
-#define N 6		// IIR filter order
+// Lab 3, Part 7
+# define N 2		// IIR filter order
+#define M 3			// number of biquads
 
+float B[M][N+1] = {{1, 0, -1}, {1, 0, -1}, {1, 0, -1}};	// numerator coefficients
+float A[M][N+1] = {{1, -1.28, 0.657}, {1, 0.513, 0.530}, {1, -0.369, 0.131}};	// denominator coefficients
+float G[M+1] = {0.499, 0.499, 0.434, 1};               // scale factors
+float x[M][N+1] = {{1.0, 0.0, 0.0},{1.0, 0.0, 0.0},{1.0, 0.0, 0.0}};   // input value (buffered)
+float y[M][N+1] = {{1.0, 0.0, 0.0},{1.0, 0.0, 0.0},{1.0, 0.0, 0.0}};   // output values (buffered)
+
+
+
+/*
+ * Lab 3, Part 4-6
+#define N 6		// IIR filter order
 float B[N+1] = { 0.108499, 0, -0.325498, 0, 0.325498, 0, -0.108499};  // numerator coefficients
 float A[N+1] = {1, -1.13553, 0.944316, -0.637821, 0.544417, -0.173657, 0.0459008}; // denom coefficients
 float x[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // input value (buffered)
@@ -34,8 +46,6 @@ float y[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // output values (buffered
 float *currentInput = &x[0];
 
 void iir_df_one(){
-//	CodecDataIn.UINT = ReadCodecData();
-//	*currentInput = CodecDataIn.Channel[0];
 	//y[n] = sum(bk*x) - sum(ak*y)
 
 	float sumB = 0;
@@ -48,6 +58,7 @@ void iir_df_one(){
 	    sumA += A[k]*y[k];
 	}
 
+
 	float currentY = sumB-sumA;
 	float currentX = currentInput[0];
 
@@ -58,10 +69,15 @@ void iir_df_one(){
 	    y[k] = y[k-1];
 	    x[k] = x[k-1];
 	}
+}
+*/
 
 
+void biquad(int k){
 
 }
+
+/* Lab 3, Part 4-6
 
 interrupt void Codec_ISR()
 ///////////////////////////////////////////////////////////////////////
@@ -76,7 +92,7 @@ interrupt void Codec_ISR()
 // Notes:     None
 ///////////////////////////////////////////////////////////////////////
 {                    
-	/* add any local variables here */
+//	add any local variables here
 
 
  	if(CheckForOverrun())					// overrun error occurred (i.e. halted DSP)
@@ -84,17 +100,36 @@ interrupt void Codec_ISR()
 
   	CodecDataIn.UINT = ReadCodecData();		// get input data samples
 	
-	/* I added my IIR filter routine here */
-//	x[0] = CodecDataIn.Channel[LEFT];		// current input value
+	// I added my IIR filter routine here //
 	x[0] = CodecDataIn.Channel[RIGHT];		// current input value
 
 
-	iir_df_one();
+//	iir_df_one();
 	
 	CodecDataOut.Channel[LEFT]  = y[0];		// setup the LEFT value	
 	CodecDataOut.Channel[RIGHT]=x[0];
-	/* end of my IIR filter routine	*/
+	// end of my IIR filter routine	//
 
 	WriteCodecData(CodecDataOut.UINT);		// send output data to  port
 }
+*/
+
+interrupt void Codec_ISR(){
+	// locals
+
+	if(CheckForOverrun()) return;
+
+	x[0][0] = CodecDataIn.Channel[LEFT];            // current input value 
+	int i;
+	for (i=0;i<M;i++){
+
+		biquad(i);                            // implement the ith biquad
+
+	}
+	CodecDataOut.Channel[LEFT]  = y[M-1][0];    // setup the LEFT value
+	CodecDataOut.Channel[RIGHT] = x[0][0];		// talk-throught for debugging
+	WriteCodecData(CodecDataOut.UINT);    // send output data to  port
+}
+
+
 
