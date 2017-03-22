@@ -30,9 +30,14 @@ volatile union {
 
 float B[M][N+1] = {{1, 0, -1}, {1, 0, -1}, {1, 0, -1}};	// numerator coefficients
 float A[M][N+1] = {{1, -1.28, 0.657}, {1, 0.513, 0.530}, {1, -0.369, 0.131}};	// denominator coefficients
-float G[M+1] = {0.499, 0.499, 0.434, 1};               // scale factors
-float x[M][N+1] = {{1.0, 0.0, 0.0},{1.0, 0.0, 0.0},{1.0, 0.0, 0.0}};   // input value (buffered)
+float G[M+1] = {0.499898671731935, 0.499898671731935, 0.434173751206302, 1.0};               // scale factors
+float x[M][N+1] = {{0, 0.0, 0.0},{0, 0.0, 0.0},{0, 0.0, 0.0}};   // input value (buffered)
 float y[M][N+1] = {{1.0, 0.0, 0.0},{1.0, 0.0, 0.0},{1.0, 0.0, 0.0}};   // output values (buffered)
+float *currentInput = &x[0][0];
+//int k;
+//float sumB;
+//float sumA;
+float currentY;
 
 
 
@@ -44,7 +49,8 @@ float A[N+1] = {1, -1.13553, 0.944316, -0.637821, 0.544417, -0.173657, 0.0459008
 float x[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // input value (buffered)
 float y[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // output values (buffered)
 float *currentInput = &x[0];
-
+*/
+/*
 void iir_df_one(){
 	//y[n] = sum(bk*x) - sum(ak*y)
 
@@ -73,8 +79,37 @@ void iir_df_one(){
 */
 
 
-void biquad(int k){
+void biquad(int j){
+	// for each current output
+	//j is the row of the outputs/inputs we're messing with
+	//y[n] = sum(bk*x) - sum(ak*y)
 
+	float sumB = 0;
+	float sumA = 0;
+	int k; //counter
+
+	for (k = 0; k<=N; k++){
+	    sumB += B[j][k]*x[j][k];
+	}
+	for(k=1; k<=N; k++){
+	    sumA += A[j][k]*y[j][k];
+	}
+
+
+	currentY = sumB-sumA;
+//	float currentX = currentInput[0];
+
+	y[j][0] = currentY;
+
+	for(k=2; k>0; k--){
+	    y[j][k] = y[j][k-1];
+	    x[j][k] = x[j][k-1];
+	}
+	if(j == M-1){
+	}
+	else{
+		x[j+1][0] = G[j]*y[j][0];
+	}
 }
 
 /* Lab 3, Part 4-6
@@ -119,7 +154,7 @@ interrupt void Codec_ISR(){
 
 	if(CheckForOverrun()) return;
 
-	x[0][0] = CodecDataIn.Channel[LEFT];            // current input value 
+	x[0][0] = G[0]*CodecDataIn.Channel[LEFT];            // current input value 
 	int i;
 	for (i=0;i<M;i++){
 
@@ -128,6 +163,8 @@ interrupt void Codec_ISR(){
 	}
 	CodecDataOut.Channel[LEFT]  = y[M-1][0];    // setup the LEFT value
 	CodecDataOut.Channel[RIGHT] = x[0][0];		// talk-throught for debugging
+
+//	CodecDataOut.Channel[RIGHT] = CodecDataIn.Channel[LEFT];
 	WriteCodecData(CodecDataOut.UINT);    // send output data to  port
 }
 
