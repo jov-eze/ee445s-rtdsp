@@ -25,32 +25,30 @@ volatile union {
 
 /* add any global variables here */
 // Lab 3, Part 7
+
 # define N 2		// IIR filter order
 #define M 3			// number of biquads
 
 float B[M][N+1] = {{1, 0, -1}, {1, 0, -1}, {1, 0, -1}};	// numerator coefficients
 float A[M][N+1] = {{1, -1.28, 0.657}, {1, 0.513, 0.530}, {1, -0.369, 0.131}};	// denominator coefficients
-float G[M+1] = {0.499898671731935, 0.499898671731935, 0.434173751206302, 1.0};               // scale factors
+float G[M+1] = {0.1085, 1.0, 1.0, 1.0};               // scale factors
 float x[M][N+1] = {{0, 0.0, 0.0},{0, 0.0, 0.0},{0, 0.0, 0.0}};   // input value (buffered)
 float y[M][N+1] = {{1.0, 0.0, 0.0},{1.0, 0.0, 0.0},{1.0, 0.0, 0.0}};   // output values (buffered)
 float *currentInput = &x[0][0];
-//int k;
-//float sumB;
-//float sumA;
 float currentY;
 
 
 
-/*
- * Lab 3, Part 4-6
+
+/*//Lab 3, Part 4-6
 #define N 6		// IIR filter order
 float B[N+1] = { 0.108499, 0, -0.325498, 0, 0.325498, 0, -0.108499};  // numerator coefficients
 float A[N+1] = {1, -1.13553, 0.944316, -0.637821, 0.544417, -0.173657, 0.0459008}; // denom coefficients
 float x[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // input value (buffered)
 float y[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // output values (buffered)
 float *currentInput = &x[0];
-*/
-/*
+
+
 void iir_df_one(){
 	//y[n] = sum(bk*x) - sum(ak*y)
 
@@ -112,8 +110,36 @@ void biquad(int j){
 	}
 }
 
-/* Lab 3, Part 4-6
 
+
+void biquad2(int j){
+	// for each current output
+	//j is the row of the outputs/inputs we're messing with
+	//y[n] = sum(bk*x) - sum(ak*y)
+
+	float sumA = 0;
+	float sumB = 0;
+	float V[M][N+1] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+	int k; 			// counter
+	int n;
+
+	for(n = 0; n<N+1; n++){
+		for(k=0; k<N+1; k++){
+			sumA += A[j][k]*V[j][k];
+			if(k == 0){}
+			else{sumB += B[j][k];}
+		}
+		V[j][n] = x[j][n] - sumA;
+		y[j][n] = B[j][n] + sumB;
+	}
+
+	for(k=2; k>0; k--){
+	    V[j][k] = V[j][k-1];
+	}
+}
+
+
+/*// Lab 3, Part 4-6
 interrupt void Codec_ISR()
 ///////////////////////////////////////////////////////////////////////
 // Purpose:   Codec interface interrupt service routine  
@@ -139,22 +165,23 @@ interrupt void Codec_ISR()
 	x[0] = CodecDataIn.Channel[RIGHT];		// current input value
 
 
-//	iir_df_one();
+	iir_df_one();
 	
 	CodecDataOut.Channel[LEFT]  = y[0];		// setup the LEFT value	
 	CodecDataOut.Channel[RIGHT]=x[0];
 	// end of my IIR filter routine	//
 
 	WriteCodecData(CodecDataOut.UINT);		// send output data to  port
-}
-*/
+}*/
 
+//Lab 3, Part 7-8
 interrupt void Codec_ISR(){
 	// locals
 
 	if(CheckForOverrun()) return;
+  	CodecDataIn.UINT = ReadCodecData();		// get input data samples
 
-	x[0][0] = G[0]*CodecDataIn.Channel[LEFT];            // current input value 
+	x[0][0] = CodecDataIn.Channel[RIGHT];            // current input value 
 	int i;
 	for (i=0;i<M;i++){
 
@@ -164,9 +191,9 @@ interrupt void Codec_ISR(){
 	CodecDataOut.Channel[LEFT]  = y[M-1][0];    // setup the LEFT value
 	CodecDataOut.Channel[RIGHT] = x[0][0];		// talk-throught for debugging
 
-//	CodecDataOut.Channel[RIGHT] = CodecDataIn.Channel[LEFT];
 	WriteCodecData(CodecDataOut.UINT);    // send output data to  port
 }
+
 
 
 
