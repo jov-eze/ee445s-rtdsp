@@ -9,6 +9,7 @@
 ///////////////////////////////////////////////////////////////////////
 
 #include "DSP_Config.h" 
+#include "coeff.h"
 #include <stdlib.h>	// needed to call the rand() function
   
 // Data is received as 2 16-bit words (left/right) packed into one
@@ -28,14 +29,27 @@ volatile union {
 /******		PART 2 IIR BUTTERWORTH FILTERS		******/
 
 // from Lab 3, Part 4-6
-#define N 6		// IIR filter order
-float A[N+1] = { 1, 0, -1, 1, -1.96004314890818, 0.984414127416097};  // numerator coefficients
-float Ag[2] = {0.00779293629195165, 1};
-float B[N+1] = { 1, 0, -1, 1, -1.87292545631220, 0.969067417193792}; // denom coefficients
-float Bg[2] = {0.0154662914031040, 1};
-//float x[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // input value (buffered)
-//float y[N+1] = {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};   // output values (buffered)
-float *currentInput = &x[0];
+float preB[3] = { 1, 0, -1} ; //numertor  [num den]
+float preA[3] = {1, -1.96004314890818, 0.984414127416097};  // numerator coefficients
+float pregain = 0.00779293629195165;
+
+
+float bandB[3] = { 1, 0, -1};
+float bandA[3] = {1, -1.87292545631220, 0.969067417193792}; // denom coefficients
+float bandgain = 0.0154662914031040 ;
+
+//float prex[3] = {0.0, 0.0, 0.0} ;
+//float prey[3] = {0.0, 0.0, 0.0} ;
+//float bandx[3] = {0.0, 0.0, 0.0} ;
+//float bandy[3] = {0.0, 0.0, 0.0} ;
+
+float y[3] = {0.0, 0.0, 0.0} ;
+float x[3] = {0.0, 0.0, 0.0} ;
+
+
+//float x[8];
+//float y;
+int N = 2;
 
 // intial globals
 Int32 counter = 0;
@@ -45,44 +59,67 @@ Int32 data[2] = {-15000, 15000};
 Int32 cosine[4] = {1, 0, -1, 0};
 Int32 scrambleInit=5;
 Int32 i;
-
-float x[8];
-float y;
 float output;
 
-
-void iir_df_one(){
+float bpf(){
 	//y[n] = sum(bk*x) - sum(ak*y)
 
 	float sumB = 0;
 	float sumA = 0;
 	int k;
 	for (k = 0; k<=N; k++){
-	    sumB += B[k]*x[k];
+	    sumB += bandB[k]*x[k];
 	}
 	for(k=1; k<=N; k++){
-	    sumA += A[k]*y[k];
+	    sumA += bandA[k]*y[k];
 	}
 
 
 	float currentY = sumB-sumA;
-	float currentX = currentInput[0];
+	float currentX = bandgain*x[0];
 
 	y[0] = currentY;
 	x[0] = currentX;
 
 	for(k=N; k>0; k--){
-	    y[k] = y[k-1];
-	    x[k] = x[k-1];
+	   y[k] = y[k-1];
+	   x[k] = x[k-1];
 	}
 }
 
-float clock_recover(float y){
+
+float prefilter(){
+	//y[n] = sum(bk*x) - sum(ak*y)
+
+	float sumB = 0;
+	float sumA = 0;
+	int k;
+	for (k = 0; k<=N; k++){
+	    sumB += preB[k]*x[k];
+	}
+	for(k=1; k<=N; k++){
+	    sumA += preA[k]*y[k];
+	}
+
+
+	float currentY = sumB-sumA;
+	float currentX = pregain*x[0];
+
+	y[0] = currentY;
+	x[0] = currentX;
+
+	for(k=N; k>0; k--){
+		y[k] = y[k-1];
+		x[k] = x[k-1];
+	}
+}
+
+float clock_recover(float clk_in){
 	// PART 2 FUNCTION
-	float clk;
-		clk = iir_df_one(i);			// Prefilter B(w)
-		clk *= outPut;					// Squarer
-		clk = iir_df_one(i);			// Bandpass Filter H(w)
+	float clk=clk_in;
+		clk = prefilter(clk);	// Prefilter B(w)
+		clk = clk*clk;			// Squarer
+		clk = bpf(clk);			// Bandpass Filter H(w)
 	return clk;
 
 }
@@ -120,11 +157,10 @@ interrupt void Codec_ISR()
 	/* add your code starting here */
     if (counter == 0) {
 		symbol = rand() & 1; // a faster version of rand() % 2
-		symbol = scramble(&scrambleInit, 1);
-		xO[0] = data[symbol]; // read the table
+//		symbol = 1000*scramble(&scrambleInit, 1);
+		x[0] = data[symbol]; // read the table
 	}
-
-    // perform impulse modulation based on the FIR filter, B[N]
+/*
     y  = 0;
 
     for (i = 0; i < 8; i++) {
@@ -134,19 +170,19 @@ interrupt void Codec_ISR()
     if (counter == (samplesPerSymbol - 1)) {
     	counter = -1;
 
-		/* shift x[] in preparation for the next symbol */
+		//shift x[] in preparation for the next symbol
  		for (i = 7; i > 0; i--) {
 			x[i] = x[i - 1];          // setup x[] for the next input
 		}
    	}
+*/
 
-   	counter++;
+//   	counter++;
 
-	output = y; //*cosine[counter & 3];
-	float clk = 15000*clock_recover(y/15000);
-
-	CodecDataOut.Channel[LEFT]  = y; // setup the LEFT  value
-	CodecDataOut.Channel[RIGHT] = clk; // setup the RIGHT value
+	output = y[0]; //*cosine[counter & 3];
+	float clk = clock_recover(y[0]/15000);
+	CodecDataOut.Channel[LEFT]  = y[0]; // setup the LEFT  value
+	CodecDataOut.Channel[RIGHT] = 15000*clk; // setup the RIGHT value
 	/* end your code here */
 
 	WriteCodecData(CodecDataOut.UINT);		// send output data to  port
