@@ -20,11 +20,13 @@
 #define LEFT  0
 #define RIGHT 1
 
+float clk_sample[100];
+int i_sample = 0;
+
 volatile union {
 	Uint32 UINT;
 	Int16 Channel[2];
 } CodecDataIn, CodecDataOut;
-
 
 /******		PART 2 IIR BUTTERWORTH FILTERS		******/
 
@@ -32,98 +34,98 @@ volatile union {
 float preB[3] = { 1, 0, -1} ; //numertor  [num den]
 float preA[3] = {1, -1.96004314890818, 0.984414127416097};  // numerator coefficients
 float pregain = 0.00779293629195165;
-
+float prey[3] = {0.0, 0.0, 0.0} ;
+float prex[3] = {0.0, 0.0, 0.0} ;
 
 float bandB[3] = { 1, 0, -1};
 float bandA[3] = {1, -1.87292545631220, 0.969067417193792}; // denom coefficients
 float bandgain = 0.0154662914031040 ;
+float bandy[3] = {0.0, 0.0, 0.0} ;
+float bandx[3] = {0.0, 0.0, 0.0} ;
 
-//float prex[3] = {0.0, 0.0, 0.0} ;
-//float prey[3] = {0.0, 0.0, 0.0} ;
-//float bandx[3] = {0.0, 0.0, 0.0} ;
-//float bandy[3] = {0.0, 0.0, 0.0} ;
+/******		PART 1 		******/
+float x[8];
+float y;
 
-float y[3] = {0.0, 0.0, 0.0} ;
-float x[3] = {0.0, 0.0, 0.0} ;
-
-
-//float x[8];
-//float y;
-int N = 2;
-
-// intial globals
 Int32 counter = 0;
 Int32 samplesPerSymbol = 20;
-Int32 symbol;
+Int32 symbol = 0;
 Int32 data[2] = {-15000, 15000};
 Int32 cosine[4] = {1, 0, -1, 0};
 Int32 scrambleInit=5;
 Int32 i;
 float output;
 
-float bpf(){
+/******		PART 2 FUNCTIONS		******/
+float bpf(float input){
 	//y[n] = sum(bk*x) - sum(ak*y)
 
 	float sumB = 0;
 	float sumA = 0;
 	int k;
 	for (k = 0; k<=N; k++){
-	    sumB += bandB[k]*x[k];
+	    sumB += bandB[k]*bandx[k];
 	}
 	for(k=1; k<=N; k++){
-	    sumA += bandA[k]*y[k];
+	    sumA += bandA[k]*bandy[k];
 	}
 
 
 	float currentY = sumB-sumA;
-	float currentX = bandgain*x[0];
+	// float currentX = bandgain*x[0];
+	float currentX = bandgain*input
 
-	y[0] = currentY;
-	x[0] = currentX;
+	bandy[0] = currentY;
+	bandx[0] = currentX;
 
 	for(k=N; k>0; k--){
-	   y[k] = y[k-1];
-	   x[k] = x[k-1];
+	   bandy[k] = bandy[k-1];
+	   bandx[k] = bandx[k-1];
 	}
+
+	return bandy[0];
 }
 
 
-float prefilter(){
+float prefilter(float input){
 	//y[n] = sum(bk*x) - sum(ak*y)
 
 	float sumB = 0;
 	float sumA = 0;
 	int k;
 	for (k = 0; k<=N; k++){
-	    sumB += preB[k]*x[k];
+	    sumB += preB[k]*prex[k];
 	}
 	for(k=1; k<=N; k++){
-	    sumA += preA[k]*y[k];
+	    sumA += preA[k]*prey[k];
 	}
 
 
 	float currentY = sumB-sumA;
-	float currentX = pregain*x[0];
+	// float currentX = pregain*prex[0];
+	float currentX = pregain*input;
 
-	y[0] = currentY;
-	x[0] = currentX;
+	prey[0] = currentY;
+	prex[0] = currentX;
 
 	for(k=N; k>0; k--){
-		y[k] = y[k-1];
-		x[k] = x[k-1];
+		prey[k] = prey[k-1];
+		prex[k] = prex[k-1];
 	}
+
+	return prey[0];
 }
 
-float clock_recover(float clk_in){
-	// PART 2 FUNCTION
-	float clk=clk_in;
-		clk = prefilter(clk);	// Prefilter B(w)
+float clock_recover(float input){
+/*	may have to switch order of prefilter and bpf	*/
+		float clk = prefilter(input);	// Prefilter B(w)
 		clk = clk*clk;			// Squarer
 		clk = bpf(clk);			// Bandpass Filter H(w)
 	return clk;
 
 }
 
+/******		PART 1 FUNCTIONS		******/
 int scramble(int* symbol_ptr, int inBit){
 	int symbol, y23, y18, yn;
 	symbol = *symbol_ptr & 0x840000;
@@ -135,9 +137,8 @@ int scramble(int* symbol_ptr, int inBit){
 	return yn;
 }
 
-
 interrupt void Codec_ISR()
-///////////////////////////////////////////////////////////////////////
+/**********************************************************************
 // Purpose:   Codec interface interrupt service routine
 //
 // Input:     None
@@ -147,44 +148,49 @@ interrupt void Codec_ISR()
 // Calls:     CheckForOverrun, ReadCodecData, WriteCodecData
 //
 // Notes:     None
-///////////////////////////////////////////////////////////////////////
+**********************************************************************/
+
 {	/* add any local variables here */
 
  	if(CheckForOverrun())					// overrun error occurred (i.e. halted DSP)
 		return;								// so serial port is reset to recover
   	CodecDataIn.UINT = ReadCodecData();		// get input data samples
 
-	/* add your code starting here */
-    if (counter == 0) {
-		symbol = rand() & 1; // a faster version of rand() % 2
-//		symbol = 1000*scramble(&scrambleInit, 1);
-		x[0] = data[symbol]; // read the table
+/********* 			SCRAMBLE BIT GENERATOR			 *********/
+	if (counter == 0){
+		symbol %= 2;
+		symbol += 1;
+		// symbol = 1000*scramble(&scrambleInit, 1);
+		x[0] = data[symbol];
 	}
-/*
-    y  = 0;
 
+/********* 			PART ONE			 *********/
+	y  = 0;
     for (i = 0; i < 8; i++) {
 		y +=  x[i]*B[counter + 20*i];	// perform the dot-product
 	}
-
     if (counter == (samplesPerSymbol - 1)) {
     	counter = -1;
 
 		//shift x[] in preparation for the next symbol
  		for (i = 7; i > 0; i--) {
-			x[i] = x[i - 1];          // setup x[] for the next input
+			x[i] = x[i - 1];        // setup x[] for the next input
 		}
    	}
-*/
+	counter++;						// if counter > 0, won't generate a random symbol
+	output = y;						//*cosine[counter & 3];
 
-//   	counter++;
+/********* 			SYMBOL RECOVERY			 *********/
+	float clk = clock_recover(x[0]/15000);
+	if(i_sample < 100){
+		clk_sample[i_sample] = clk;
+		i_sample += 1;
+	}
 
-	output = y[0]; //*cosine[counter & 3];
-	float clk = clock_recover(y[0]/15000);
-	CodecDataOut.Channel[LEFT]  = y[0]; // setup the LEFT  value
+/********* 			OUTPUT TO BOARD			 *********/
+	CodecDataOut.Channel[LEFT]  = y; // setup the LEFT  value
 	CodecDataOut.Channel[RIGHT] = 15000*clk; // setup the RIGHT value
-	/* end your code here */
 
 	WriteCodecData(CodecDataOut.UINT);		// send output data to  port
-}
 
+}
