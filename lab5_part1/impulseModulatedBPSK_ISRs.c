@@ -54,6 +54,7 @@ Int32 data[2] = {-15000, 15000};
 Int32 cosine[4] = {1, 0, -1, 0};
 Int32 scrambleInit=5;
 Int32 i;
+Int32 N = 2;
 float output;
 
 /******		PART 2 FUNCTIONS		******/
@@ -73,7 +74,7 @@ float bpf(float input){
 
 	float currentY = sumB-sumA;
 	// float currentX = bandgain*x[0];
-	float currentX = bandgain*input
+	float currentX = bandgain*input;
 
 	bandy[0] = currentY;
 	bandx[0] = currentX;
@@ -158,10 +159,14 @@ interrupt void Codec_ISR()
 
 /********* 			SCRAMBLE BIT GENERATOR			 *********/
 	if (counter == 0){
-		symbol %= 2;
-		symbol += 1;
-		// symbol = 1000*scramble(&scrambleInit, 1);
+//		symbol %= 2;
+		symbol = scramble(&scrambleInit, 1);
 		x[0] = data[symbol];
+//		symbol += 1;
+
+//		symbol = 1000*rand() & 1; // a faster version of rand() % 2
+//		symbol = 1000*scramble(&scrambleInit, 1);
+//		x[0] = data[symbol]; // read the table
 	}
 
 /********* 			PART ONE			 *********/
@@ -181,15 +186,15 @@ interrupt void Codec_ISR()
 	output = y;						//*cosine[counter & 3];
 
 /********* 			SYMBOL RECOVERY			 *********/
-	float clk = clock_recover(x[0]/15000);
+	float clk = clock_recover(x[0]/1500);
+	float clk_out = 24000*clk;
 	if(i_sample < 100){
-		clk_sample[i_sample] = clk;
+		clk_sample[i_sample] = clk_out;
 		i_sample += 1;
 	}
-
 /********* 			OUTPUT TO BOARD			 *********/
 	CodecDataOut.Channel[LEFT]  = y; // setup the LEFT  value
-	CodecDataOut.Channel[RIGHT] = 15000*clk; // setup the RIGHT value
+	CodecDataOut.Channel[RIGHT] = clk_out; // setup the RIGHT value
 
 	WriteCodecData(CodecDataOut.UINT);		// send output data to  port
 
